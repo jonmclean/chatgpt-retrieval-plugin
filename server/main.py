@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Optional
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Depends, Body, UploadFile
@@ -66,7 +67,7 @@ async def upsert_file(
         ids = await datastore.upsert([document])
         return UpsertResponse(ids=ids)
     except Exception as e:
-        print("Error:", e)
+        logging.exception("Error in /upsert-file endpoint: %s", e)
         raise HTTPException(status_code=500, detail=f"str({e})")
 
 
@@ -81,7 +82,7 @@ async def upsert(
         ids = await datastore.upsert(request.documents)
         return UpsertResponse(ids=ids)
     except Exception as e:
-        print("Error:", e)
+        logging.exception("Error in /upsert endpoint: %s", e)
         raise HTTPException(status_code=500, detail="Internal Service Error")
 
 
@@ -98,7 +99,7 @@ async def query_main(
         )
         return QueryResponse(results=results)
     except Exception as e:
-        print("Error:", e)
+        logging.exception("Error in /query endpoint: %s", e)
         raise HTTPException(status_code=500, detail="Internal Service Error")
 
 
@@ -117,7 +118,7 @@ async def query(
         )
         return QueryResponse(results=results)
     except Exception as e:
-        print("Error:", e)
+        logging.exception("Error in /query endpoint: %s", e)
         raise HTTPException(status_code=500, detail="Internal Service Error")
 
 
@@ -141,7 +142,7 @@ async def delete(
         )
         return DeleteResponse(success=success)
     except Exception as e:
-        print("Error:", e)
+        logging.exception("Error in /delete endpoint: %s", e)
         raise HTTPException(status_code=500, detail="Internal Service Error")
 
 
