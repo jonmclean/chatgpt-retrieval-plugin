@@ -35,5 +35,9 @@ async def get_datastore() -> DataStore:
             from datastore.providers.qdrant_datastore import QdrantDataStore
 
             return QdrantDataStore()
+        case "diskann":
+            from datastore.providers.diskann_datastore import DiskANNDataStore
+
+            return DiskANNDataStore()
         case _:
             raise ValueError(f"Unsupported vector database: {datastore}")
