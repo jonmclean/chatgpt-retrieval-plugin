@@ -11,10 +11,9 @@ from models.models import (
     QueryWithEmbedding,
     DocumentChunkWithScore, DocumentChunkMetadata,
 )
-from qdrant_client.http import models as rest
 
-import qdrant_client
-
+import diskannpy as dap
+import numpy as np
 from services.date import to_unix_timestamp
 
 class DiskANNDataStore(DataStore):
@@ -26,9 +25,24 @@ class DiskANNDataStore(DataStore):
         Args:
             vector_size: Size of the embedding stored in a collection
         """
+        logging.debug("Initializing Sqlite")
         self._conn = sqlite3.connect("diskann_sqlite.db")
         self._document_table_name = "documents"
         self._conn.cursor().execute(f"CREATE TABLE If NOT EXISTS {self._document_table_name}(id INTEGER PRIMARY KEY AUTOINCREMENT, externalId TEXT, documentText TEXT)")
+        logging.debug("Finished initializing Sqlite")
+        self._diskann_path = "diskann_index"
+        logging.debug("Initializing DiskANN index")
+        self._diskann_index = dap.DynamicMemoryIndex(
+            metric="l2",
+            vector_dtype=np.float32,
+            # OpenAI's embeddings have a length of 1,536
+            dim=1536,
+            max_points=11_000,
+            complexity=64,
+            graph_degree=32,
+            num_threads=16,
+        )
+        logging.debug("Finished initializing DiskANN index")
 
     async def _query(
         self,
@@ -39,9 +53,16 @@ class DiskANNDataStore(DataStore):
         """
         results = []
         for query in queries:
-            document_ids = (1, 2, 3,)
-            parameter_marks = ','.join('?'*len(document_ids))
-            cursor = self._conn.cursor().execute(f"SELECT id, externalId, documentText from {self._document_table_name} WHERE id IN ({parameter_marks})", document_ids)
+            diskann_neighbors, diskann_distances = self._diskann_index.search(
+                np.array(query.embedding).astype(np.float32),
+                k_neighbors=query.top_k,
+                complexity=query.top_k * 2,
+            )
+
+            internal_id_to_distance_dict = dict(zip(diskann_neighbors, diskann_distances))
+
+            parameter_marks = ','.join('?'*len(diskann_neighbors))
+            cursor = self._conn.cursor().execute(f"SELECT id, externalId, documentText from {self._document_table_name} WHERE id IN ({parameter_marks})", diskann_neighbors.tolist())
             # Fetch all the data
             data = cursor.fetchall()
             query_results = []
@@ -52,18 +73,19 @@ class DiskANNDataStore(DataStore):
                 doc_text = item[2]
                 query_results.append(
                     DocumentChunkWithScore(
-                        score = 0.55555,
-                        id = external_id,
-                        text = doc_text,
-                        metadata = DocumentChunkMetadata(
-                            document_id = external_id,
-                            source = "email",
-                            source_id = "mySourceId",
-                            url = "myUrl",
-                            created_at = "myCreatedAt",
-                            author = "myAuthor",
+                        # "distance" goes up 0 to 1 but "score" goes from 1 to 0.
+                        score=(1 - internal_id_to_distance_dict[internal_id]),
+                        id=external_id,
+                        text=doc_text,
+                        metadata=DocumentChunkMetadata(
+                            document_id=external_id,
+                            source="email",
+                            source_id="mySourceId",
+                            url="myUrl",
+                            created_at="myCreatedAt",
+                            author="myAuthor",
                         ),
-                        embedding= [0.99, 0.88, 0.77],
+                        embedding=[0.99, 0.88, 0.77],
                     ))
 
             results.append(QueryResult(query=query.query, results=query_results,))
@@ -75,16 +97,25 @@ class DiskANNDataStore(DataStore):
         Takes in a list of list of document chunks and inserts them into the database.
         Return a list of document ids.
         """
-        doc_ids = []
+        doc_ids: list[str] = []
 
         cursor = self._conn.cursor()
+
+        index_vectors = []
+        internal_ids = []
 
         for external_doc_id, doc_chunks in chunks.items():
             logging.debug(f"Upserting {external_doc_id} with {len(doc_chunks)} chunks")
             for doc_chunk in doc_chunks:
+                index_vectors.append(np.array(doc_chunk.embedding))
                 cursor.execute(f"INSERT INTO {self._document_table_name} (externalId, documentText) VALUES (?, ?)", (doc_chunk.id, doc_chunk.text))
+                internal_ids.append(cursor.lastrowid)
+                doc_ids.append(doc_chunk.id)
+
+        self._diskann_index.batch_insert(vectors=np.array(index_vectors).astype(np.float32), vector_ids=np.array(internal_ids).astype(np.uintc))
 
         self._conn.commit()
+        self._diskann_index.save(self._diskann_path)
         return doc_ids
 
     async def delete(
@@ -128,7 +159,7 @@ class DiskANNDataStore(DataStore):
             self,
             metadata_filter: Optional[DocumentMetadataFilter] = None,
     ) -> Optional[tuple[str, Any]]:
-        if metadata_filter is None and ids is None:
+        if metadata_filter is None:
             return None
 
         clauses = []
