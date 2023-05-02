@@ -33,11 +33,11 @@ class DiskANNDataStore(DataStore):
         self._diskann_path = "diskann_index"
         logging.debug("Initializing DiskANN index")
         self._diskann_index = dap.DynamicMemoryIndex(
-            metric="l2",
+            metric="cosine",
             vector_dtype=np.float32,
             # OpenAI's embeddings have a length of 1,536
             dim=1536,
-            max_points=11_000,
+            max_points=20_000,
             complexity=64,
             graph_degree=32,
             num_threads=16,
