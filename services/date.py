@@ -1,5 +1,6 @@
 import arrow
 
+from typing import Optional
 
 def to_unix_timestamp(date_str: str) -> int:
     """
@@ -21,3 +22,19 @@ def to_unix_timestamp(date_str: str) -> int:
         # If the parsing fails, return the current unix timestamp and print a warning
         print(f"Invalid date format: {date_str}")
         return int(arrow.now().timestamp())
+
+
+def to_date_string(unix_timestamp: Optional[int]) -> str:
+    """
+    Convert a UNIX date into a string representation for return to the user
+    Args:
+        unix_timestamp: Unix timestamp of the date we want to format as string.
+
+    Returns:
+        The timestamp formatted as a string so it can be returned to the user in a JSON payload
+    """
+    if unix_timestamp is None:
+        return None
+
+    arrow_obj = arrow.get(unix_timestamp)
+    return arrow_obj.format('YYYY-MM-DD HH:mm:ss')

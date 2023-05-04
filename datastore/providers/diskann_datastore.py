@@ -14,7 +14,7 @@ from models.models import (
 
 import diskannpy as dap
 import numpy as np
-from services.date import to_unix_timestamp
+from services.date import to_unix_timestamp, to_date_string
 
 class DiskANNDataStore(DataStore):
     def __init__(
@@ -27,8 +27,18 @@ class DiskANNDataStore(DataStore):
         """
         logging.debug("Initializing Sqlite")
         self._conn = sqlite3.connect("diskann_sqlite.db")
+        self._conn.row_factory = sqlite3.Row
         self._document_table_name = "documents"
-        self._conn.cursor().execute(f"CREATE TABLE If NOT EXISTS {self._document_table_name}(id INTEGER PRIMARY KEY AUTOINCREMENT, externalId TEXT, documentText TEXT)")
+        self._conn.cursor().execute(f"CREATE TABLE If NOT EXISTS {self._document_table_name}"
+                                    f"(id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                                    f"externalId TEXT NOT NULL, "
+                                    f"documentText TEXT NOT NULL, "
+                                    f"source TEXT NULL, "
+                                    f"source_id TEXT NULL, "
+                                    f"url TEXT NULL, "
+                                    f"created_at INTEGER NULL, "
+                                    f"author TEXT NULL"
+                                    f")")
         logging.debug("Finished initializing Sqlite")
         self._diskann_path = "diskann_index"
         logging.debug("Initializing DiskANN index")
@@ -62,28 +72,37 @@ class DiskANNDataStore(DataStore):
             internal_id_to_distance_dict = dict(zip(diskann_neighbors, diskann_distances))
 
             parameter_marks = ','.join('?'*len(diskann_neighbors))
-            cursor = self._conn.cursor().execute(f"SELECT id, externalId, documentText from {self._document_table_name} WHERE id IN ({parameter_marks})", diskann_neighbors.tolist())
+            cursor = self._conn.cursor().execute(f"SELECT "
+                                                 f"id, "  # 0
+                                                 f"externalId, "  # 1
+                                                 f"documentText, "  # 2
+                                                 f"source, "  # 3
+                                                 f"source_id, "  # 4
+                                                 f"url, "  #5
+                                                 f"created_at, "  # 6
+                                                 f"author "  # 7
+                                                 f"from {self._document_table_name} WHERE id IN ({parameter_marks})",
+                                                 diskann_neighbors.tolist())
             # Fetch all the data
             data = cursor.fetchall()
             query_results = []
 
             for item in data:
-                internal_id = item[0]
-                external_id = item[1]
-                doc_text = item[2]
+                internal_id = item['id']
+                external_id = item['externalId']
                 query_results.append(
                     DocumentChunkWithScore(
                         # "distance" goes up 0 to 1 but "score" goes from 1 to 0.
                         score=(1 - internal_id_to_distance_dict[internal_id]),
                         id=external_id,
-                        text=doc_text,
+                        text=item['documentText'],
                         metadata=DocumentChunkMetadata(
                             document_id=external_id,
-                            source="email",
-                            source_id="mySourceId",
-                            url="myUrl",
-                            created_at="myCreatedAt",
-                            author="myAuthor",
+                            source=item['source'],
+                            source_id=item['source_id'],
+                            url=item['url'],
+                            created_at=to_date_string(item['created_at']),
+                            author=item['author'],
                         ),
                         embedding=[0.99, 0.88, 0.77],
                     ))
@@ -107,8 +126,31 @@ class DiskANNDataStore(DataStore):
         for external_doc_id, doc_chunks in chunks.items():
             logging.debug(f"Upserting {external_doc_id} with {len(doc_chunks)} chunks")
             for doc_chunk in doc_chunks:
+                created_at = (
+                    to_unix_timestamp(doc_chunk.metadata.created_at)
+                    if doc_chunk.metadata.created_at is not None
+                    else None
+                )
+
                 index_vectors.append(np.array(doc_chunk.embedding))
-                cursor.execute(f"INSERT INTO {self._document_table_name} (externalId, documentText) VALUES (?, ?)", (doc_chunk.id, doc_chunk.text))
+                cursor.execute(f"INSERT INTO {self._document_table_name} "
+                               f"(externalId, "
+                               f"documentText, "
+                               f"source, "
+                               f"source_id, "
+                               f"url, "
+                               f"created_at, "
+                               f"author"
+                               f") VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                                doc_chunk.id,
+                                doc_chunk.text,
+                                doc_chunk.metadata.source,
+                                doc_chunk.metadata.source_id,
+                                doc_chunk.metadata.url,
+                                created_at,
+                                doc_chunk.metadata.author
+                                )
+                               )
                 internal_ids.append(cursor.lastrowid)
                 doc_ids.append(doc_chunk.id)
 
