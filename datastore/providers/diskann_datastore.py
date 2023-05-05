@@ -154,10 +154,15 @@ class DiskANNDataStore(DataStore):
                 internal_ids.append(cursor.lastrowid)
                 doc_ids.append(doc_chunk.id)
 
-        self._diskann_index.batch_insert(vectors=np.array(index_vectors).astype(np.float32), vector_ids=np.array(internal_ids).astype(np.uintc))
 
-        self._conn.commit()
+        logging.debug(f"Writing {internal_ids=} to diskann")
+        self._diskann_index.batch_insert(vectors=np.array(index_vectors).astype(np.float32), vector_ids=np.array(internal_ids).astype(np.uintc))
         self._diskann_index.save(self._diskann_path)
+        logging.debug(f"Finished DiskANN write diskann")
+
+        logging.debug("Committing transaction to sqlite")
+        self._conn.commit()
+        logging.debug("Transaction committed")
         return doc_ids
 
     async def delete(
