@@ -110,7 +110,7 @@ class DiskANNDataStore(DataStore):
                         embedding=json.loads(item['embedding']),
                     ))
 
-            results.append(QueryResult(query=query.query, results=query_results,))
+            results.append(QueryResult(query=query.query, results=sorted(query_results, key=lambda result: result.score, reverse=True)))
 
         return results
 
