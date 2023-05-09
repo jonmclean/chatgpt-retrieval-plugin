@@ -13,6 +13,7 @@ from models.models import (
 )
 
 import diskannpy as dap
+import json
 import numpy as np
 from services.date import to_unix_timestamp, to_date_string
 
@@ -37,7 +38,8 @@ class DiskANNDataStore(DataStore):
                                     f"source_id TEXT NULL, "
                                     f"url TEXT NULL, "
                                     f"created_at INTEGER NULL, "
-                                    f"author TEXT NULL"
+                                    f"author TEXT NULL, "
+                                    f"embedding TEXT NOT NULL"
                                     f")")
         logging.debug("Finished initializing Sqlite")
         self._diskann_path = "diskann_index"
@@ -80,7 +82,8 @@ class DiskANNDataStore(DataStore):
                                                  f"source_id, "  # 4
                                                  f"url, "  #5
                                                  f"created_at, "  # 6
-                                                 f"author "  # 7
+                                                 f"author, "  # 7
+                                                 f"embedding "  # 8
                                                  f"from {self._document_table_name} WHERE id IN ({parameter_marks})",
                                                  diskann_neighbors.tolist())
             # Fetch all the data
@@ -104,7 +107,7 @@ class DiskANNDataStore(DataStore):
                             created_at=to_date_string(item['created_at']),
                             author=item['author'],
                         ),
-                        embedding=[0.99, 0.88, 0.77],
+                        embedding=json.loads(item['embedding']),
                     ))
 
             results.append(QueryResult(query=query.query, results=query_results,))
@@ -140,15 +143,17 @@ class DiskANNDataStore(DataStore):
                                f"source_id, "
                                f"url, "
                                f"created_at, "
-                               f"author"
-                               f") VALUES (?, ?, ?, ?, ?, ?, ?)", (
+                               f"author, "
+                               f"embedding "
+                               f") VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
                                 doc_chunk.id,
                                 doc_chunk.text,
                                 doc_chunk.metadata.source,
                                 doc_chunk.metadata.source_id,
                                 doc_chunk.metadata.url,
                                 created_at,
-                                doc_chunk.metadata.author
+                                doc_chunk.metadata.author,
+                                json.dumps(doc_chunk.embedding),
                                 )
                                )
                 internal_ids.append(cursor.lastrowid)
