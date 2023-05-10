@@ -1,7 +1,11 @@
+import abc
+from abc import ABC
 from typing import Dict, List, Optional, Any
 
 import sqlite3
 import logging
+
+from diskannpy import VectorLikeBatch, VectorIdentifierBatch, QueryResponse
 
 from datastore.datastore import DataStore
 from models.models import (
@@ -17,14 +21,68 @@ import json
 import numpy as np
 from services.date import to_unix_timestamp, to_date_string
 
+
+class DiskANNProvider(ABC):
+    @abc.abstractmethod
+    def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def search(self, embedding: np.array, k_neighbors: int, complexity: int):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def delete(self, vector_ids: VectorIdentifierBatch):
+        raise NotImplementedError
+
+
+class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
+    def __init__(
+            self,
+            vector_size: int = 1536,
+    ):
+        self._diskann_path = "diskann_index"
+        logging.debug("Initializing DiskANN index")
+        self._diskann_index = dap.DynamicMemoryIndex(
+            metric="cosine",
+            vector_dtype=np.float32,
+            # OpenAI's embeddings have a length of 1,536
+            dim=vector_size,
+            max_points=20_000,
+            complexity=64,
+            graph_degree=32,
+            num_threads=16,
+        )
+        logging.debug("Finished initializing DiskANN index")
+
+    def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
+        logging.debug(f"Writing {vector_ids=} to diskann")
+        self._diskann_index.batch_insert(vectors=np.array(vectors).astype(np.float32),
+                                         vector_ids=np.array(vector_ids).astype(np.uintc))
+        self._diskann_index.save(self._diskann_path)
+        logging.debug(f"Finished DiskANN write diskann")
+
+    def search(self, embedding: np.array, k_neighbors: int, complexity: int) -> QueryResponse:
+        return self._diskann_index.search(
+            embedding,
+            k_neighbors=k_neighbors,
+            complexity=complexity,
+        )
+
+    def delete(self, vector_ids: VectorIdentifierBatch):
+        for vector_id in vector_ids:
+            self._diskann_index.mark_deleted(vector_id)
+        self._diskann_index.save(self._diskann_path)
+
+
 class DiskANNDataStore(DataStore):
     def __init__(
-        self,
-        vector_size: int = 1536,
+            self,
+            diskann_provider: DiskANNProvider,
     ):
         """
         Args:
-            vector_size: Size of the embedding stored in a collection
+            diskann_provider: Provider that handles all interactions with DiskANN
         """
         logging.debug("Initializing Sqlite")
         self._conn = sqlite3.connect("diskann_sqlite.db")
@@ -42,30 +100,18 @@ class DiskANNDataStore(DataStore):
                                     f"embedding TEXT NOT NULL"
                                     f")")
         logging.debug("Finished initializing Sqlite")
-        self._diskann_path = "diskann_index"
-        logging.debug("Initializing DiskANN index")
-        self._diskann_index = dap.DynamicMemoryIndex(
-            metric="cosine",
-            vector_dtype=np.float32,
-            # OpenAI's embeddings have a length of 1,536
-            dim=1536,
-            max_points=20_000,
-            complexity=64,
-            graph_degree=32,
-            num_threads=16,
-        )
-        logging.debug("Finished initializing DiskANN index")
+        self._diskann_provider = diskann_provider
 
     async def _query(
-        self,
-        queries: List[QueryWithEmbedding],
+            self,
+            queries: List[QueryWithEmbedding],
     ) -> List[QueryResult]:
         """
         Takes in a list of queries with embeddings and filters and returns a list of query results with matching document chunks and scores.
         """
         results = []
         for query in queries:
-            diskann_neighbors, diskann_distances = self._diskann_index.search(
+            diskann_neighbors, diskann_distances = self._diskann_provider.search(
                 np.array(query.embedding).astype(np.float32),
                 k_neighbors=query.top_k,
                 complexity=query.top_k * 2,
@@ -73,14 +119,14 @@ class DiskANNDataStore(DataStore):
 
             internal_id_to_distance_dict = dict(zip(diskann_neighbors, diskann_distances))
 
-            parameter_marks = ','.join('?'*len(diskann_neighbors))
+            parameter_marks = ','.join('?' * len(diskann_neighbors))
             cursor = self._conn.cursor().execute(f"SELECT "
                                                  f"id, "  # 0
                                                  f"externalId, "  # 1
                                                  f"documentText, "  # 2
                                                  f"source, "  # 3
                                                  f"source_id, "  # 4
-                                                 f"url, "  #5
+                                                 f"url, "  # 5
                                                  f"created_at, "  # 6
                                                  f"author, "  # 7
                                                  f"embedding "  # 8
@@ -110,7 +156,8 @@ class DiskANNDataStore(DataStore):
                         embedding=json.loads(item['embedding']),
                     ))
 
-            results.append(QueryResult(query=query.query, results=sorted(query_results, key=lambda result: result.score, reverse=True)))
+            results.append(QueryResult(query=query.query,
+                                       results=sorted(query_results, key=lambda result: result.score, reverse=True)))
 
         return results
 
@@ -146,24 +193,20 @@ class DiskANNDataStore(DataStore):
                                f"author, "
                                f"embedding "
                                f") VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
-                                doc_chunk.id,
-                                doc_chunk.text,
-                                doc_chunk.metadata.source,
-                                doc_chunk.metadata.source_id,
-                                doc_chunk.metadata.url,
-                                created_at,
-                                doc_chunk.metadata.author,
-                                json.dumps(doc_chunk.embedding),
-                                )
+                                   doc_chunk.id,
+                                   doc_chunk.text,
+                                   doc_chunk.metadata.source,
+                                   doc_chunk.metadata.source_id,
+                                   doc_chunk.metadata.url,
+                                   created_at,
+                                   doc_chunk.metadata.author,
+                                   json.dumps(doc_chunk.embedding),
+                               )
                                )
                 internal_ids.append(cursor.lastrowid)
                 doc_ids.append(doc_chunk.id)
 
-
-        logging.debug(f"Writing {internal_ids=} to diskann")
-        self._diskann_index.batch_insert(vectors=np.array(index_vectors).astype(np.float32), vector_ids=np.array(internal_ids).astype(np.uintc))
-        self._diskann_index.save(self._diskann_path)
-        logging.debug(f"Finished DiskANN write diskann")
+        self._diskann_provider.write(vectors=index_vectors, vector_ids=internal_ids)
 
         logging.debug("Committing transaction to sqlite")
         self._conn.commit()
@@ -182,30 +225,64 @@ class DiskANNDataStore(DataStore):
         Returns whether the operation was successful.
         """
 
-        delete_succeeded = None
 
         if delete_all:
             logging.debug(f"Deleting all vectors")
+            logging.debug(f"Retrieving vector IDs from sqllite and deleting from DiskANN")
+            cursor = self._conn.cursor().execute(f"SELECT id from {self._document_table_name}")
+            while True:
+                rows = cursor.fetchmany(100)
+                if not rows:
+                    break
+                vector_ids = np.asarray([row[0] for row in rows])
+                self._diskann_provider.delete(vector_ids=vector_ids)
+            logging.debug("Truncating table in sqllite")
             self._conn.cursor().execute(f"DELETE FROM {self._document_table_name}")
-            delete_succeeded = True
-
-        if ids and len(ids) > 0:
-            parameter_marks = ','.join('?'*len(ids))
-
-            self._conn.cursor().execute(f"DELETE FROM {self._document_table_name} WHERE externalId IN {parameter_marks}", ids)
-            delete_succeeded = True
-
-        if filter:
-            sql_filter = self._convert_metadata_filter_to_sqlite_filter(metadata_filter=filter)
-            logging.debug(f"Deleting vectors with filter {sql_filter}")
-            self._conn.cursor().execute(f"DELETE FROM {self._document_table_name} WHERE {sql_filter[0]}", sql_filter[1])
-            delete_succeeded = True
-
-        if delete_succeeded:
             self._conn.commit()
             return True
         else:
-            return False
+            delete_succeeded = None
+            if ids and len(ids) > 0:
+                logging.debug("Retrieving vector IDS from sqllite and deleting from DiskANN")
+                parameter_marks = ','.join('?' * len(ids))
+
+                cursor = self._conn.cursor().execute(f"SELECT id from {self._document_table_name} "
+                                                     f"WHERE externalId IN ({parameter_marks})", ids)
+                while True:
+                    rows = cursor.fetchmany(100)
+                    if not rows:
+                        break
+                    vector_ids = np.asarray([row[0] for row in rows])
+                    parameter_marks = ','.join('?' * len(vector_ids))
+                    self._diskann_provider.delete(vector_ids=vector_ids)
+                    logging.debug("Removing from sqllite")
+                    self._conn.cursor().execute(
+                        f"DELETE FROM {self._document_table_name} WHERE id IN ({parameter_marks})", vector_ids)
+
+                delete_succeeded = True
+
+            if filter:
+                sql_filter = self._convert_metadata_filter_to_sqlite_filter(metadata_filter=filter)
+                logging.debug(f"Deleting vectors from with filter {sql_filter}")
+                cursor = self._conn.cursor().execute(f"SELECT id from {self._document_table_name} "
+                                                     f"WHERE {sql_filter[0]}", sql_filter[1])
+                while True:
+                    rows = cursor.fetchmany(100)
+                    if not rows:
+                        break
+                    vector_ids = np.asarray([row[0] for row in rows])
+                    parameter_marks = ','.join('?' * len(vector_ids))
+                    logging.debug(f"Deleting vectors from with filter {sql_filter}")
+                    self._conn.cursor().execute(f"DELETE FROM {self._document_table_name} "
+                                                f"WHERE id IN ({parameter_marks})", vector_ids)
+                    self._diskann_provider.delete(vector_ids=vector_ids)
+                delete_succeeded = True
+
+            if delete_succeeded:
+                self._conn.commit()
+                return True
+            else:
+                return False
 
     def _convert_metadata_filter_to_sqlite_filter(
             self,

@@ -36,8 +36,8 @@ async def get_datastore() -> DataStore:
 
             return QdrantDataStore()
         case "diskann":
-            from datastore.providers.diskann_datastore import DiskANNDataStore
+            from datastore.providers.diskann_datastore import DiskANNDataStore, DynamicMemoryIndexDiskANNProvider
 
-            return DiskANNDataStore()
+            return DiskANNDataStore(DynamicMemoryIndexDiskANNProvider())
         case _:
             raise ValueError(f"Unsupported vector database: {datastore}")
