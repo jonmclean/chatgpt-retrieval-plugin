@@ -24,19 +24,24 @@ from services.date import to_unix_timestamp, to_date_string
 
 class DiskANNProvider(ABC):
     @abc.abstractmethod
-    def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def search(self, embedding: np.array, k_neighbors: int, complexity: int):
         raise NotImplementedError
 
-    @abc.abstractmethod
+    def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
+        raise NotImplementedError
+
     def delete(self, vector_ids: VectorIdentifierBatch):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def is_read_only(self) -> bool:
         raise NotImplementedError
 
 
 class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
+    def is_read_only(self) -> bool:
+        return False
+
     def __init__(
             self,
             vector_size: int = 1536,
@@ -53,6 +58,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
             graph_degree=32,
             num_threads=16,
         )
+        self._diskann_index.save(self._diskann_path)
         logging.debug("Finished initializing DiskANN index")
 
     def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
@@ -73,6 +79,38 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         for vector_id in vector_ids:
             self._diskann_index.mark_deleted(vector_id)
         self._diskann_index.save(self._diskann_path)
+
+
+class StaticMemoryIndexDiskANNProvider(DiskANNProvider):
+    def is_read_only(self) -> bool:
+        return True
+
+    def __init__(
+            self,
+            vector_size: int = 1536,
+    ):
+        logging.debug("Loading static DiskANN index")
+        self._diskann_index = dap.StaticMemoryIndex(
+            metric="cosine",
+            vector_dtype=np.float32,
+            data_path="diskann_index",
+            index_directory="./",
+            # OpenAI's embeddings have a length of 1,536
+            dim=vector_size,
+            max_points=20_000,
+            complexity=64,
+            initial_search_complexity=64 * 0.95,
+            graph_degree=32,
+            num_threads=16,
+        )
+        logging.debug("Finished loading DiskANN index")
+
+    def search(self, embedding: np.array, k_neighbors: int, complexity: int) -> QueryResponse:
+        return self._diskann_index.search(
+            embedding,
+            k_neighbors=k_neighbors,
+            complexity=complexity,
+        )
 
 
 class DiskANNDataStore(DataStore):
@@ -166,6 +204,9 @@ class DiskANNDataStore(DataStore):
         Takes in a list of list of document chunks and inserts them into the database.
         Return a list of document ids.
         """
+        if self._diskann_provider.is_read_only():
+            raise NotImplementedError(f"Cannot upsert into a read-only DiskANN index")
+
         doc_ids: list[str] = []
 
         cursor = self._conn.cursor()
@@ -225,6 +266,8 @@ class DiskANNDataStore(DataStore):
         Returns whether the operation was successful.
         """
 
+        if self._diskann_provider.is_read_only():
+            raise NotImplementedError(f"Cannot delete from a read-only DiskANN index")
 
         if delete_all:
             logging.debug(f"Deleting all vectors")
