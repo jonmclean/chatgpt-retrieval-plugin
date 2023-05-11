@@ -129,6 +129,7 @@ class DiskANNDataStore(DataStore):
         self._conn.cursor().execute(f"CREATE TABLE If NOT EXISTS {self._document_table_name}"
                                     f"(id INTEGER PRIMARY KEY AUTOINCREMENT, "
                                     f"externalId TEXT NOT NULL, "
+                                    f"documentChunkId TEXT NOT NULL, "
                                     f"documentText TEXT NOT NULL, "
                                     f"source TEXT NULL, "
                                     f"source_id TEXT NULL, "
@@ -159,15 +160,16 @@ class DiskANNDataStore(DataStore):
 
             parameter_marks = ','.join('?' * len(diskann_neighbors))
             cursor = self._conn.cursor().execute(f"SELECT "
-                                                 f"id, "  # 0
-                                                 f"externalId, "  # 1
-                                                 f"documentText, "  # 2
-                                                 f"source, "  # 3
-                                                 f"source_id, "  # 4
-                                                 f"url, "  # 5
-                                                 f"created_at, "  # 6
-                                                 f"author, "  # 7
-                                                 f"embedding "  # 8
+                                                 f"id, "
+                                                 f"externalId, "
+                                                 f"documentChunkId, "
+                                                 f"documentText, "
+                                                 f"source, "
+                                                 f"source_id, "
+                                                 f"url, "
+                                                 f"created_at, "
+                                                 f"author, "
+                                                 f"embedding "
                                                  f"from {self._document_table_name} WHERE id IN ({parameter_marks})",
                                                  diskann_neighbors.tolist())
             # Fetch all the data
@@ -176,15 +178,14 @@ class DiskANNDataStore(DataStore):
 
             for item in data:
                 internal_id = item['id']
-                external_id = item['externalId']
                 query_results.append(
                     DocumentChunkWithScore(
                         # "distance" goes up 0 to 1 but "score" goes from 1 to 0.
                         score=(1 - internal_id_to_distance_dict[internal_id]),
-                        id=external_id,
+                        id=item['documentChunkId'],
                         text=item['documentText'],
                         metadata=DocumentChunkMetadata(
-                            document_id=external_id,
+                            document_id=item['externalId'],
                             source=item['source'],
                             source_id=item['source_id'],
                             url=item['url'],
@@ -226,6 +227,7 @@ class DiskANNDataStore(DataStore):
                 index_vectors.append(np.array(doc_chunk.embedding))
                 cursor.execute(f"INSERT INTO {self._document_table_name} "
                                f"(externalId, "
+                               f"documentChunkId, "
                                f"documentText, "
                                f"source, "
                                f"source_id, "
@@ -233,7 +235,8 @@ class DiskANNDataStore(DataStore):
                                f"created_at, "
                                f"author, "
                                f"embedding "
-                               f") VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (
+                               f") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+                                   doc_chunk.metadata.document_id,
                                    doc_chunk.id,
                                    doc_chunk.text,
                                    doc_chunk.metadata.source,
