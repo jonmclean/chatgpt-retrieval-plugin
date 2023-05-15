@@ -1,4 +1,5 @@
 import abc
+import asyncio
 from abc import ABC
 from typing import Dict, List, Optional, Any
 
@@ -58,14 +59,29 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
             graph_degree=32,
             num_threads=16,
         )
-        self._diskann_index.save(self._diskann_path)
+        self._diskann_save_needed = True
+        self._save_task = asyncio.get_event_loop().create_task(self.save_async_loop())
         logging.debug("Finished initializing DiskANN index")
+
+    def __del__(self):
+        self._save_task.cancel()
+
+    async def save_async_loop(self):
+        while True:
+            if self._diskann_save_needed:
+                logging.debug("Starting DiskANN save")
+                self._diskann_index.save(self._diskann_path)
+                self._diskann_save_needed = False
+                logging.debug("Finished DiskANN save")
+
+            # Save again in five minutes
+            await asyncio.sleep(60 * 5)
 
     def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
         logging.debug(f"Writing {vector_ids=} to diskann")
         self._diskann_index.batch_insert(vectors=np.array(vectors).astype(np.float32),
                                          vector_ids=np.array(vector_ids).astype(np.uintc))
-        self._diskann_index.save(self._diskann_path)
+        self._diskann_save_needed = True
         logging.debug(f"Finished DiskANN write diskann")
 
     def search(self, embedding: np.array, k_neighbors: int, complexity: int) -> QueryResponse:
@@ -78,7 +94,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
     def delete(self, vector_ids: VectorIdentifierBatch):
         for vector_id in vector_ids:
             self._diskann_index.mark_deleted(vector_id)
-        self._diskann_index.save(self._diskann_path)
+        self._diskann_save_needed = True
 
 
 class StaticMemoryIndexDiskANNProvider(DiskANNProvider):
