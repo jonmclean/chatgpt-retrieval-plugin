@@ -64,18 +64,40 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         logging.debug("Finished initializing DiskANN index")
 
     def __del__(self):
+        # Be sure we cancel the save task when shutting down.
         self._save_task.cancel()
 
-    async def save_async_loop(self):
-        while True:
-            if self._diskann_save_needed:
-                logging.debug("Starting DiskANN save")
-                self._diskann_index.save(self._diskann_path)
-                self._diskann_save_needed = False
-                logging.debug("Finished DiskANN save")
+        self._do_save()
 
-            # Save again in five minutes
+    async def save_async_loop(self):
+        """
+        Loops on the event thread and saven the index periodically.  This is to keep the web request from blocking
+        when an upsert or delete comes in from the REST API.  Data could be lost from the index if the event thread
+        is shutdown between the upsert/delete and the next save.
+
+        :return: This method should run until Python shuts down.  Nothing to return.
+        """
+        while True:
+            await self._do_save()
+
+            # Save again in five minutes.  Since we are in an event loop this will allow
+            # other REST requests to be serviced while we wait for the next save.
             await asyncio.sleep(60 * 5)
+
+    async def _do_save(self):
+        """
+        Save the index if there are changes that need to be persisted
+
+        :return: None
+        """
+        # Only save if there is something to save.
+        if self._diskann_save_needed:
+            logging.debug("Starting DiskANN save")
+            self._diskann_index.save(self._diskann_path)
+            self._diskann_save_needed = False
+            logging.debug("Finished DiskANN save")
+
+        return None
 
     def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
         logging.debug(f"Writing {vector_ids=} to diskann")
