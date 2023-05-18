@@ -36,8 +36,20 @@ async def get_datastore() -> DataStore:
 
             return QdrantDataStore()
         case "diskann":
-            from datastore.providers.diskann_datastore import DiskANNDataStore, DynamicMemoryIndexDiskANNProvider
+            from datastore.providers.diskann_datastore import DiskANNDataStore, \
+                DynamicMemoryIndexDiskANNProvider, StaticMemoryIndexDiskANNProvider
 
-            return DiskANNDataStore(DynamicMemoryIndexDiskANNProvider())
+            DISKANN_DATASTORE_TYPE = os.environ.get("DISKANN_DATASTORE_TYPE", "DynamicMemoryIndex").casefold()
+
+            provider = None
+            match DISKANN_DATASTORE_TYPE:
+                case "dynamicmemoryindex":
+                    provider = DynamicMemoryIndexDiskANNProvider()
+                case "staticmemoryindex":
+                    provider = StaticMemoryIndexDiskANNProvider()
+                case _:
+                    raise ValueError(f"Unsupported DiskANN index type: {DISKANN_DATASTORE_TYPE}")
+
+            return DiskANNDataStore(provider)
         case _:
             raise ValueError(f"Unsupported vector database: {datastore}")
