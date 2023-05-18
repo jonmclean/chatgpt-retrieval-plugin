@@ -51,9 +51,8 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         logging.debug("Initializing DiskANN index")
         self._diskann_index = dap.DynamicMemoryIndex(
             metric="cosine",
-            vector_dtype=np.float32,
-            # OpenAI's embeddings have a length of 1,536
-            dim=vector_size,
+            vector_dtype=np.single,
+            dimensions=vector_size,
             max_points=20_000,
             complexity=64,
             graph_degree=32,
@@ -101,7 +100,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
 
     def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
         logging.debug(f"Writing {vector_ids=} to diskann")
-        self._diskann_index.batch_insert(vectors=np.array(vectors).astype(np.float32),
+        self._diskann_index.batch_insert(vectors=np.array(vectors).astype(np.single),
                                          vector_ids=np.array(vector_ids).astype(np.uintc))
         self._diskann_save_needed = True
         logging.debug(f"Finished DiskANN write diskann")
@@ -129,17 +128,10 @@ class StaticMemoryIndexDiskANNProvider(DiskANNProvider):
     ):
         logging.debug("Loading static DiskANN index")
         self._diskann_index = dap.StaticMemoryIndex(
-            metric="cosine",
-            vector_dtype=np.float32,
-            data_path="diskann_index",
             index_directory="./",
-            # OpenAI's embeddings have a length of 1,536
-            dim=vector_size,
-            max_points=20_000,
-            complexity=64,
-            initial_search_complexity=64 * 0.95,
-            graph_degree=32,
-            num_threads=16,
+            num_threads=4,
+            initial_search_complexity=60,
+            index_prefix="diskann_index",
         )
         logging.debug("Finished loading DiskANN index")
 
@@ -189,7 +181,7 @@ class DiskANNDataStore(DataStore):
         results = []
         for query in queries:
             diskann_neighbors, diskann_distances = self._diskann_provider.search(
-                np.array(query.embedding).astype(np.float32),
+                np.array(query.embedding).astype(np.single),
                 k_neighbors=query.top_k,
                 complexity=query.top_k * 2,
             )
