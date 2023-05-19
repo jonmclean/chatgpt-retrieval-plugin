@@ -9,8 +9,11 @@ from models.models import Document, DocumentMetadata
 from services.chunks import get_document_chunks
 from services.date import to_unix_timestamp
 
+# Stanford Quaston Answer Dataset
 data = load_dataset("squad", split="train")
 data = data.to_pandas()
+
+# Ignore the question ... just get the context (a string of text from an article)
 data = data.drop_duplicates(subset=["context"])
 
 print(len(data))
