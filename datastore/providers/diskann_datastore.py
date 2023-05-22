@@ -46,6 +46,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
     def __init__(
             self,
             vector_size: int = 1536,
+            write_to_disk: bool = True,
     ):
         self._diskann_path = "diskann_index"
         logging.debug("Initializing DiskANN index")
@@ -59,14 +60,17 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
             num_threads=16,
         )
         self._diskann_save_needed = True
-        self._save_task = asyncio.get_event_loop().create_task(self.save_async_loop())
+        self._write_to_disk = write_to_disk
+        if self._write_to_disk:
+            self._save_task = asyncio.get_event_loop().create_task(self.save_async_loop())
         logging.debug("Finished initializing DiskANN index")
 
     def __del__(self):
         # Be sure we cancel the save task when shutting down.
-        self._save_task.cancel()
+        if self._diskann_save_needed and self._write_to_disk:
+            self._save_task.cancel()
 
-        self._do_save()
+            self._do_save()
 
     async def save_async_loop(self):
         """
@@ -147,13 +151,14 @@ class DiskANNDataStore(DataStore):
     def __init__(
             self,
             diskann_provider: DiskANNProvider,
+            sqlite_database: str = "diskann_sqlite.db"
     ):
         """
         Args:
             diskann_provider: Provider that handles all interactions with DiskANN
         """
         logging.debug("Initializing Sqlite")
-        self._conn = sqlite3.connect("diskann_sqlite.db")
+        self._conn = sqlite3.connect(sqlite_database)
         self._conn.row_factory = sqlite3.Row
         self._document_table_name = "documents"
         self._conn.cursor().execute(f"CREATE TABLE If NOT EXISTS {self._document_table_name}"
@@ -248,6 +253,7 @@ class DiskANNDataStore(DataStore):
         for external_doc_id, doc_chunks in chunks.items():
             logging.debug(f"Upserting {external_doc_id} with {len(doc_chunks)} chunks")
             for doc_chunk in doc_chunks:
+                print(f"DoC CHUNK {doc_chunk}")
                 created_at = (
                     to_unix_timestamp(doc_chunk.metadata.created_at)
                     if doc_chunk.metadata.created_at is not None
@@ -278,7 +284,7 @@ class DiskANNDataStore(DataStore):
                                )
                                )
                 internal_ids.append(cursor.lastrowid)
-                doc_ids.append(doc_chunk.id)
+            doc_ids.append(external_doc_id)
 
         self._diskann_provider.write(vectors=index_vectors, vector_ids=internal_ids)
 
