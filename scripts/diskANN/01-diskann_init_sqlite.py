@@ -12,6 +12,7 @@ from services.date import to_unix_timestamp
 # Stanford Quaston Answer Dataset
 data = load_dataset("squad", split="train")
 data = data.to_pandas()
+data = data.assign(rand_int=np.random.randint(1, 11, size=len(data)))
 
 # Ignore the question ... just get the context (a string of text from an article)
 data = data.drop_duplicates(subset=["context"])
@@ -40,9 +41,9 @@ documents = [
         text=r['context'],
         metadata=DocumentMetadata(
             source='file',
-            source_id=f"source_id_{r['id']}",
+            source_id=f"source_id_{r['rand_int']}",
             url=f"file://example/{r['id']}",
-            author=f"author_{r['id']}",
+            author=f"author_{r['rand_int']}",
             created_at=str(datetime.now()),
             title=r['title']
         )
