@@ -1,5 +1,6 @@
 from datastore.datastore import DataStore
 import os
+import logging
 
 
 async def get_datastore() -> DataStore:
@@ -44,8 +45,10 @@ async def get_datastore() -> DataStore:
             provider = None
             match DISKANN_DATASTORE_TYPE:
                 case "dynamicmemoryindex":
+                    logging.debug("Loading dynamic DiskANN index")
                     provider = DynamicMemoryIndexDiskANNProvider()
                 case "staticmemoryindex":
+                    logging.debug("Loading static DiskANN index")
                     provider = StaticMemoryIndexDiskANNProvider()
                 case _:
                     raise ValueError(f"Unsupported DiskANN index type: {DISKANN_DATASTORE_TYPE}")
