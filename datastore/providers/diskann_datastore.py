@@ -51,10 +51,10 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         self._diskann_path = "diskann_index"
         logging.debug("Initializing DiskANN index")
         self._diskann_index = dap.DynamicMemoryIndex(
-            metric="cosine",
+            distance_metric="cosine",
             vector_dtype=np.single,
             dimensions=vector_size,
-            max_points=20_000,
+            max_vectors=20_000,
             complexity=64,
             graph_degree=32,
             num_threads=16,
@@ -253,7 +253,6 @@ class DiskANNDataStore(DataStore):
         for external_doc_id, doc_chunks in chunks.items():
             logging.debug(f"Upserting {external_doc_id} with {len(doc_chunks)} chunks")
             for doc_chunk in doc_chunks:
-                print(f"DoC CHUNK {doc_chunk}")
                 created_at = (
                     to_unix_timestamp(doc_chunk.metadata.created_at)
                     if doc_chunk.metadata.created_at is not None
