@@ -67,7 +67,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
 
     def __del__(self):
         # Be sure we cancel the save task when shutting down.
-        if self._diskann_save_needed and self._write_to_disk:
+        if self._write_to_disk and self._diskann_save_needed:
             self._save_task.cancel()
 
             self._do_save()
