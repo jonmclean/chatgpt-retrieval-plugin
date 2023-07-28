@@ -95,10 +95,16 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         """
         # Only save if there is something to save.
         if self._diskann_save_needed:
-            logging.debug("Starting DiskANN save")
-            self._diskann_index.save(self._diskann_path)
-            self._diskann_save_needed = False
-            logging.debug("Finished DiskANN save")
+            logging.debug(f"Starting DiskANN save to path '{self._diskann_path}'")
+            try:
+                self._diskann_index.save(self._diskann_path)
+                self._diskann_save_needed = False
+                logging.debug(f"Finished DiskANN save to path '{self._diskann_path}'")
+            except Exception as e:
+                logging.error("Error saving diskann dynamic index", exc_info=True)
+                pass
+        else:
+            logging.debug("No changes / DiskANN save not needed")
 
         return None
 
