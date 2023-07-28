@@ -620,17 +620,17 @@ graph = ["objgraph (>=1.7.2)"]
 
 [[package]]
 name = "diskannpy"
-version = "0.5.0rc4"
+version = "0.5.0rc5"
 description = "DiskANN Python extension module"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "diskannpy-0.5.0rc4-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:08390c8f7cc676121b7fd42239e265071ebe4273687316678102696cbb8413cb"},
-    {file = "diskannpy-0.5.0rc4-cp310-cp310-win_amd64.whl", hash = "sha256:5a6e9d26983a7388fdf296cdf18c4a3855725f75943ba06b875a678330b3a97c"},
-    {file = "diskannpy-0.5.0rc4-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:e503be0d75cfad7c541e19141e5b3513d945199508fdea8dc96125645eda3027"},
-    {file = "diskannpy-0.5.0rc4-cp311-cp311-win_amd64.whl", hash = "sha256:5a161cecdc4a3b3f3023ce966a5ec83e0a110c5a216fbd3f59e4ecf62305e82f"},
-    {file = "diskannpy-0.5.0rc4-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:1629b740b714a755b719b4babdcb5c93a580f22e1a9eb674a2b2a264beb60a76"},
-    {file = "diskannpy-0.5.0rc4-cp39-cp39-win_amd64.whl", hash = "sha256:56a04e81b4411d17d61190748ffc8f4016887330698ef8ad4c9852e6fa0441bc"},
+    {file = "diskannpy-0.5.0rc5-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:cd36d08a638069aea85bd5e0c557dd5e0512264a4f93a2f450a71450b30e1c0e"},
+    {file = "diskannpy-0.5.0rc5-cp310-cp310-win_amd64.whl", hash = "sha256:29f418a9160728e2be65fb3e9c5d4b9ca23f43ae2ea1b8853193a75cb2861f1e"},
+    {file = "diskannpy-0.5.0rc5-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:bf925502ce4d702f1b2074df621fdbc363c02a5271f050da84ec14e2b613746c"},
+    {file = "diskannpy-0.5.0rc5-cp311-cp311-win_amd64.whl", hash = "sha256:aeb224d43f13c83280732ef5b6a3290dde76a9dececdb2f80b62e5f5eda8c432"},
+    {file = "diskannpy-0.5.0rc5-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:187d7b4f56e6f2988930b8e049ad5fd4db5efa0deda50623b5ef52b6ade8f3f4"},
+    {file = "diskannpy-0.5.0rc5-cp39-cp39-win_amd64.whl", hash = "sha256:adff82f36370a0efa2f04c3b2569b872e4342abc17f280e959f92011d36c518d"},
 ]
 
 [package.dependencies]
@@ -3034,4 +3034,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "5754b082198497843d0a21126ab5a3ffd7b3869f0b50606933bd91df72834711"
+content-hash = "dd1bfdd1813b90f318e39f807829b0726ed4331908cd94721c4b0209c95f5999"
