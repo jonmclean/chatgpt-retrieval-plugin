@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Any
 
 import sqlite3
 import logging
+import os
 
 from diskannpy import VectorLikeBatch, VectorIdentifierBatch, QueryResponse
 
@@ -45,24 +46,43 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
 
     def __init__(
             self,
+            data_path: str = "diskann_index",
             vector_size: int = 1536,
             write_to_disk: bool = True,
     ):
-        self._diskann_path = "diskann_index"
+        self._data_path = data_path
         logging.debug("Initializing DiskANN index")
-        self._diskann_index = dap.DynamicMemoryIndex(
-            distance_metric="cosine",
-            vector_dtype=np.single,
-            dimensions=vector_size,
-            max_vectors=20_000,
-            complexity=64,
-            graph_degree=32,
-            num_threads=16,
-        )
-        self._diskann_save_needed = True
+
+        if not os.path.exists(self._data_path):
+            logging.info(f"Making data storage path: '{self._data_path}'")
+            os.makedirs(self._data_path)
+            self._diskann_index = dap.DynamicMemoryIndex(
+                distance_metric="cosine",
+                vector_dtype=np.single,
+                dimensions=vector_size,
+                max_vectors=20_000,
+                complexity=64,
+                graph_degree=32,
+                num_threads=16,
+            )
+            self._diskann_save_needed = True
+        else:
+            self._diskann_index = dap.DynamicMemoryIndex.from_file(
+                index_directory = self._data_path,
+                max_vectors = 20_000,
+                complexity = 64,
+                graph_degree = 32,
+                num_threads = 16,
+                index_prefix = "diskann_index",
+            )
+            logging.info(f"Data storage path '{self._data_path}' already exists")
+
         self._write_to_disk = write_to_disk
         if self._write_to_disk:
+            logging.debug("Starting diskann save timer")
             self._save_task = asyncio.get_event_loop().create_task(self.save_async_loop())
+        else:
+            logging.debug("Not writing diskann index to disk on a timer")
         logging.debug("Finished initializing DiskANN index")
 
     def __del__(self):
@@ -80,6 +100,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
 
         :return: This method should run until Python shuts down.  Nothing to return.
         """
+        logging.debug("Starting diskann save timer loop")
         while True:
             await self._do_save()
 
@@ -95,11 +116,14 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         """
         # Only save if there is something to save.
         if self._diskann_save_needed:
-            logging.debug(f"Starting DiskANN save to path '{self._diskann_path}'")
             try:
-                self._diskann_index.save(self._diskann_path)
+                logging.debug(f"Starting DiskANN save to path '{self._data_path}'")
+                self._diskann_index.save(
+                    save_path = self._data_path,
+                    index_prefix = "diskann_index",
+                )
                 self._diskann_save_needed = False
-                logging.debug(f"Finished DiskANN save to path '{self._diskann_path}'")
+                logging.debug(f"Finished DiskANN save to path '{self._data_path}'")
             except Exception as e:
                 logging.error("Error saving diskann dynamic index", exc_info=True)
                 pass
@@ -157,13 +181,17 @@ class DiskANNDataStore(DataStore):
     def __init__(
             self,
             diskann_provider: DiskANNProvider,
-            sqlite_database: str = "diskann_sqlite.db"
+            data_path: str = "data"
     ):
         """
         Args:
             diskann_provider: Provider that handles all interactions with DiskANN
+            data_path: Directory that will contain the sqlite database and diskann indexes
         """
-        logging.debug("Initializing Sqlite")
+        self._data_path = data_path
+        sqlite_database = os.path.join(self._data_path, "document_data.db")
+
+        logging.debug(f"Initializing Sqlite database: '{sqlite_database}'")
         self._conn = sqlite3.connect(sqlite_database)
         self._conn.row_factory = sqlite3.Row
         self._document_table_name = "documents"
@@ -233,7 +261,7 @@ class DiskANNDataStore(DataStore):
                             created_at=to_date_string(item['created_at']),
                             author=item['author'],
                         ),
-                        embedding=json.loads(item['embedding']),
+                        embedding=[] #json.loads(item['embedding']),
                     ))
 
             results.append(QueryResult(query=query.query,

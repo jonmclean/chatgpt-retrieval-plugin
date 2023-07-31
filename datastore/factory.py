@@ -43,16 +43,17 @@ async def get_datastore() -> DataStore:
             DISKANN_DATASTORE_TYPE = os.environ.get("DISKANN_DATASTORE_TYPE", "DynamicMemoryIndex").casefold()
 
             provider = None
+            data_path = "diskann_data"
             match DISKANN_DATASTORE_TYPE:
                 case "dynamicmemoryindex":
-                    logging.debug("Loading dynamic DiskANN index")
-                    provider = DynamicMemoryIndexDiskANNProvider()
+                    logging.debug("Loading dynamic DiskANN index provider")
+                    provider = DynamicMemoryIndexDiskANNProvider(data_path=data_path)
                 case "staticmemoryindex":
-                    logging.debug("Loading static DiskANN index")
+                    logging.debug("Loading static DiskANN index provider")
                     provider = StaticMemoryIndexDiskANNProvider()
                 case _:
                     raise ValueError(f"Unsupported DiskANN index type: {DISKANN_DATASTORE_TYPE}")
 
-            return DiskANNDataStore(provider)
+            return DiskANNDataStore(provider, data_path=data_path)
         case _:
             raise ValueError(f"Unsupported vector database: {datastore}")
