@@ -3,6 +3,7 @@
 from typing import Optional
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Body, UploadFile
+import logging
 
 from models.api import (
     DeleteRequest,
@@ -38,6 +39,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+logging.basicConfig(level="DEBUG")
 
 @app.route("/.well-known/ai-plugin.json")
 async def get_manifest(request):

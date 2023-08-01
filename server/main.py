@@ -6,6 +6,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Depends, Body, UploadFil
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 
+logging.basicConfig(level="DEBUG")
+
 from models.api import (
     DeleteRequest,
     DeleteResponse,

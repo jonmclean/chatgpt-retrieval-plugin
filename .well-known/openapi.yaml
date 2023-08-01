@@ -1,45 +1,160 @@
+---
 openapi: 3.0.2
 info:
-  title: Retrieval Plugin API
-  description: A retrieval API for querying and filtering documents based on natural language queries and metadata
-  version: 1.0.0
-  servers:
-    - url: https://your-app-url.com
+  title: FastAPI
+  version: 0.1.0
 paths:
-  /query:
+  "/upsert-file":
     post:
-      summary: Query
-      description: Accepts search query objects array each with query and optional filter. Break down complex questions into sub-questions. Refine results by criteria, e.g. time / source, don't do this often. Split queries if ResponseTooLargeError occurs.
-      operationId: query_query_post
+      summary: Upsert File
+      operationId: upsert_file_upsert_file_post
       requestBody:
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: "#/components/schemas/QueryRequest"
+              "$ref": "#/components/schemas/Body_upsert_file_upsert_file_post"
         required: true
       responses:
-        "200":
+        '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/QueryResponse"
-        "422":
+                "$ref": "#/components/schemas/UpsertResponse"
+        '422':
           description: Validation Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HTTPValidationError"
-      security:
-        - HTTPBearer: []
+                "$ref": "#/components/schemas/HTTPValidationError"
+  "/upsert":
+    post:
+      summary: Upsert
+      operationId: upsert_upsert_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/UpsertRequest"
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/UpsertResponse"
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HTTPValidationError"
+  "/query":
+    post:
+      summary: Query Main
+      operationId: query_main_query_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/QueryRequest"
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/QueryResponse"
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HTTPValidationError"
+  "/delete":
+    delete:
+      summary: Delete
+      operationId: delete_delete_delete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DeleteRequest"
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/DeleteResponse"
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HTTPValidationError"
 components:
   schemas:
+    Body_upsert_file_upsert_file_post:
+      title: Body_upsert_file_upsert_file_post
+      required:
+        - file
+      type: object
+      properties:
+        file:
+          title: File
+          type: string
+          format: binary
+        metadata:
+          title: Metadata
+          type: string
+    DeleteRequest:
+      title: DeleteRequest
+      type: object
+      properties:
+        ids:
+          title: Ids
+          type: array
+          items:
+            type: string
+        filter:
+          "$ref": "#/components/schemas/DocumentMetadataFilter"
+        delete_all:
+          title: Delete All
+          type: boolean
+          default: false
+    DeleteResponse:
+      title: DeleteResponse
+      required:
+        - success
+      type: object
+      properties:
+        success:
+          title: Success
+          type: boolean
+    Document:
+      title: Document
+      required:
+        - text
+      type: object
+      properties:
+        id:
+          title: Id
+          type: string
+        text:
+          title: Text
+          type: string
+        metadata:
+          "$ref": "#/components/schemas/DocumentMetadata"
     DocumentChunkMetadata:
       title: DocumentChunkMetadata
       type: object
       properties:
         source:
-          $ref: "#/components/schemas/Source"
+          "$ref": "#/components/schemas/Source"
         source_id:
           title: Source Id
           type: string
@@ -70,7 +185,7 @@ components:
           title: Text
           type: string
         metadata:
-          $ref: "#/components/schemas/DocumentChunkMetadata"
+          "$ref": "#/components/schemas/DocumentChunkMetadata"
         embedding:
           title: Embedding
           type: array
@@ -79,6 +194,24 @@ components:
         score:
           title: Score
           type: number
+    DocumentMetadata:
+      title: DocumentMetadata
+      type: object
+      properties:
+        source:
+          "$ref": "#/components/schemas/Source"
+        source_id:
+          title: Source Id
+          type: string
+        url:
+          title: Url
+          type: string
+        created_at:
+          title: Created At
+          type: string
+        author:
+          title: Author
+          type: string
     DocumentMetadataFilter:
       title: DocumentMetadataFilter
       type: object
@@ -87,7 +220,7 @@ components:
           title: Document Id
           type: string
         source:
-          $ref: "#/components/schemas/Source"
+          "$ref": "#/components/schemas/Source"
         source_id:
           title: Source Id
           type: string
@@ -108,7 +241,7 @@ components:
           title: Detail
           type: array
           items:
-            $ref: "#/components/schemas/ValidationError"
+            "$ref": "#/components/schemas/ValidationError"
     Query:
       title: Query
       required:
@@ -119,7 +252,7 @@ components:
           title: Query
           type: string
         filter:
-          $ref: "#/components/schemas/DocumentMetadataFilter"
+          "$ref": "#/components/schemas/DocumentMetadataFilter"
         top_k:
           title: Top K
           type: integer
@@ -134,7 +267,7 @@ components:
           title: Queries
           type: array
           items:
-            $ref: "#/components/schemas/Query"
+            "$ref": "#/components/schemas/Query"
     QueryResponse:
       title: QueryResponse
       required:
@@ -145,7 +278,7 @@ components:
           title: Results
           type: array
           items:
-            $ref: "#/components/schemas/QueryResult"
+            "$ref": "#/components/schemas/QueryResult"
     QueryResult:
       title: QueryResult
       required:
@@ -160,7 +293,7 @@ components:
           title: Results
           type: array
           items:
-            $ref: "#/components/schemas/DocumentChunkWithScore"
+            "$ref": "#/components/schemas/DocumentChunkWithScore"
     Source:
       title: Source
       enum:
@@ -169,6 +302,28 @@ components:
         - chat
       type: string
       description: An enumeration.
+    UpsertRequest:
+      title: UpsertRequest
+      required:
+        - documents
+      type: object
+      properties:
+        documents:
+          title: Documents
+          type: array
+          items:
+            "$ref": "#/components/schemas/Document"
+    UpsertResponse:
+      title: UpsertResponse
+      required:
+        - ids
+      type: object
+      properties:
+        ids:
+          title: Ids
+          type: array
+          items:
+            type: string
     ValidationError:
       title: ValidationError
       required:
@@ -190,7 +345,3 @@ components:
         type:
           title: Error Type
           type: string
-  securitySchemes:
-    HTTPBearer:
-      type: http
-      scheme: bearer
