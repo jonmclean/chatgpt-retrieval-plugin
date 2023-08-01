@@ -1,4 +1,5 @@
 import arrow
+from loguru import logger
 
 from typing import Optional
 
@@ -20,7 +21,7 @@ def to_unix_timestamp(date_str: str) -> int:
         return int(date_obj.timestamp())
     except arrow.parser.ParserError:
         # If the parsing fails, return the current unix timestamp and print a warning
-        print(f"Invalid date format: {date_str}")
+        logger.info(f"Invalid date format: {date_str}")
         return int(arrow.now().timestamp())
 
 
