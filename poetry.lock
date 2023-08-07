@@ -881,21 +881,24 @@ graph = ["objgraph (>=1.7.2)"]
 
 [[package]]
 name = "diskannpy"
-version = "0.5.0rc5"
+version = "0.6.0"
 description = "DiskANN Python extension module"
 optional = false
 python-versions = ">=3.9"
 files = [
-    {file = "diskannpy-0.5.0rc5-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:cd36d08a638069aea85bd5e0c557dd5e0512264a4f93a2f450a71450b30e1c0e"},
-    {file = "diskannpy-0.5.0rc5-cp310-cp310-win_amd64.whl", hash = "sha256:29f418a9160728e2be65fb3e9c5d4b9ca23f43ae2ea1b8853193a75cb2861f1e"},
-    {file = "diskannpy-0.5.0rc5-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:bf925502ce4d702f1b2074df621fdbc363c02a5271f050da84ec14e2b613746c"},
-    {file = "diskannpy-0.5.0rc5-cp311-cp311-win_amd64.whl", hash = "sha256:aeb224d43f13c83280732ef5b6a3290dde76a9dececdb2f80b62e5f5eda8c432"},
-    {file = "diskannpy-0.5.0rc5-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:187d7b4f56e6f2988930b8e049ad5fd4db5efa0deda50623b5ef52b6ade8f3f4"},
-    {file = "diskannpy-0.5.0rc5-cp39-cp39-win_amd64.whl", hash = "sha256:adff82f36370a0efa2f04c3b2569b872e4342abc17f280e959f92011d36c518d"},
+    {file = "diskannpy-0.6.0-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:e47332bee0d9e631a6684c18c73200bd4ef7d77930acb2c34294a855afbc4e6a"},
+    {file = "diskannpy-0.6.0-cp310-cp310-win_amd64.whl", hash = "sha256:19331b60453b20212dcc826d1dadaa9bda0a2fbd14f1196ca2fe15eeeacb6796"},
+    {file = "diskannpy-0.6.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:e5193437ab55869cb62a8122de7550ea7a3710a007061e78bb55bc91a6020313"},
+    {file = "diskannpy-0.6.0-cp311-cp311-win_amd64.whl", hash = "sha256:f42f6fe1eeabc375a30eb83549fce82a7a9dfd379d1e135f5dbd44ddda496261"},
+    {file = "diskannpy-0.6.0-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:b7a76bf06dc758c6db5c700bd41a36c83938cd2ec826e03f709554dc47a597e7"},
+    {file = "diskannpy-0.6.0-cp39-cp39-win_amd64.whl", hash = "sha256:dd6a3b0c0d8f1f825ec54ef21899b767f369be763143afd945330f4521ede1ac"},
 ]
 
 [package.dependencies]
 numpy = "1.25"
+
+[package.extras]
+dev = ["black", "isort", "mypy"]
 
 [[package]]
 name = "dnspython"
@@ -4593,4 +4596,4 @@ postgresql = ["psycopg2cffi"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "72689402f974a6e768d1311592012b35ed80c999b21884a0833e8d5c31420bd0"
+content-hash = "458168dd998a9d408e026ca5147465021b0d4675801f584b047ac3c37eb5dacf"
