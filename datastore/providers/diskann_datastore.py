@@ -54,7 +54,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         logger.debug("Initializing DiskANN index")
 
         if not os.path.exists(self._data_path):
-            logger.info(f"Making data storage path: '{self._data_path}'")
+            logger.info("Making data storage path: '{}'", self._data_path)
             os.makedirs(self._data_path)
             self._diskann_index = dap.DynamicMemoryIndex(
                 distance_metric="cosine",
@@ -75,7 +75,7 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
                 num_threads = 16,
                 index_prefix = "diskann_index",
             )
-            logger.info(f"Data storage path '{self._data_path}' already exists")
+            logger.info("Data storage path '{}' already exists", self._data_path)
 
         self._write_to_disk = write_to_disk
         if self._write_to_disk:
@@ -117,13 +117,13 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         # Only save if there is something to save.
         if self._diskann_save_needed:
             try:
-                logger.debug(f"Starting DiskANN save to path '{self._data_path}'")
+                logger.debug("Starting DiskANN save to path '{}'", self._data_path)
                 self._diskann_index.save(
                     save_path = self._data_path,
                     index_prefix = "diskann_index",
                 )
                 self._diskann_save_needed = False
-                logger.debug(f"Finished DiskANN save to path '{self._data_path}'")
+                logger.debug("Finished DiskANN save to path '{}'", self._data_path)
             except Exception as e:
                 logger.error("Error saving diskann dynamic index", exc_info=True)
                 pass
@@ -133,11 +133,11 @@ class DynamicMemoryIndexDiskANNProvider(DiskANNProvider):
         return None
 
     def write(self, vectors: VectorLikeBatch, vector_ids: VectorIdentifierBatch):
-        logger.debug(f"Writing {vector_ids=} to diskann")
+        logger.debug("Writing vector_ids={} to diskann", vector_ids)
         self._diskann_index.batch_insert(vectors=np.array(vectors).astype(np.single),
                                          vector_ids=np.array(vector_ids).astype(np.uintc))
         self._diskann_save_needed = True
-        logger.debug(f"Finished DiskANN write diskann")
+        logger.debug("Finished DiskANN write diskann")
 
     def search(self, embedding: np.array, k_neighbors: int, complexity: int) -> QueryResponse:
         return self._diskann_index.search(
@@ -191,7 +191,7 @@ class DiskANNDataStore(DataStore):
         self._data_path = data_path
         sqlite_database = os.path.join(self._data_path, "document_data.db")
 
-        logger.debug(f"Initializing Sqlite database: '{sqlite_database}'")
+        logger.debug("Initializing Sqlite database: '{}'", sqlite_database)
         self._conn = sqlite3.connect(sqlite_database)
         self._conn.row_factory = sqlite3.Row
         self._document_table_name = "documents"
@@ -285,7 +285,7 @@ class DiskANNDataStore(DataStore):
         internal_ids = []
 
         for external_doc_id, doc_chunks in chunks.items():
-            logger.debug(f"Upserting {external_doc_id} with {len(doc_chunks)} chunks")
+            logger.debug("Upserting {} with {} chunks", external_doc_id, len(doc_chunks))
             for doc_chunk in doc_chunks:
                 created_at = (
                     to_unix_timestamp(doc_chunk.metadata.created_at)
@@ -339,11 +339,11 @@ class DiskANNDataStore(DataStore):
         """
 
         if self._diskann_provider.is_read_only():
-            raise NotImplementedError(f"Cannot delete from a read-only DiskANN index")
+            raise NotImplementedError("Cannot delete from a read-only DiskANN index")
 
         if delete_all:
-            logger.debug(f"Deleting all vectors")
-            logger.debug(f"Retrieving vector IDs from sqllite and deleting from DiskANN")
+            logger.debug("Deleting all vectors")
+            logger.debug("Retrieving vector IDs from sqllite and deleting from DiskANN")
             cursor = self._conn.cursor().execute(f"SELECT id from {self._document_table_name}")
             while True:
                 rows = cursor.fetchmany(100)
@@ -378,7 +378,7 @@ class DiskANNDataStore(DataStore):
 
             if filter:
                 sql_filter = self._convert_metadata_filter_to_sqlite_filter(metadata_filter=filter)
-                logger.debug(f"Deleting vectors from with filter {sql_filter}")
+                logger.debug("Deleting vectors from with filter {}", sql_filter)
                 cursor = self._conn.cursor().execute(f"SELECT id from {self._document_table_name} "
                                                      f"WHERE {sql_filter[0]}", sql_filter[1])
                 while True:
@@ -387,7 +387,7 @@ class DiskANNDataStore(DataStore):
                         break
                     vector_ids = np.asarray([row[0] for row in rows])
                     parameter_marks = ','.join('?' * len(vector_ids))
-                    logger.debug(f"Deleting vectors from with filter {sql_filter}")
+                    logger.debug("Deleting vectors from with filter '{}'", sql_filter)
                     self._conn.cursor().execute(f"DELETE FROM {self._document_table_name} "
                                                 f"WHERE id IN ({parameter_marks})", vector_ids)
                     self._diskann_provider.delete(vector_ids=vector_ids)
@@ -408,6 +408,8 @@ class DiskANNDataStore(DataStore):
 
         clauses = []
         parameters = []
+
+        logger.trace("Creating SQL filter for metadata: {}", metadata_filter)
 
         # Equality filters for the payload attributes
         if metadata_filter:
