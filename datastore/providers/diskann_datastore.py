@@ -228,6 +228,18 @@ class DiskANNDataStore(DataStore):
             internal_id_to_distance_dict = dict(zip(diskann_neighbors, diskann_distances))
 
             parameter_marks = ','.join('?' * len(diskann_neighbors))
+            sql_filter: str
+            sql_filter_parameters: List[str]
+            sql_filter, sql_filter_parameters = self._convert_metadata_filter_to_sqlite_filter(metadata_filter=query.filter)
+            parameters = diskann_neighbors.tolist()
+            logger.debug("SQL Filter {}", sql_filter)
+            if sql_filter is not None:
+                sql_filter = f"id IN ({parameter_marks}) AND {sql_filter}"
+                parameters = parameters + sql_filter_parameters
+            else:
+                sql_filter = f"id IN ({parameter_marks})"
+            logger.debug("Searching SQL for vectors from with filter '{}' and parameters '{}'", sql_filter, parameters)
+
             cursor = self._conn.cursor().execute(f"SELECT "
                                                  f"id, "
                                                  f"externalId, "
@@ -239,8 +251,8 @@ class DiskANNDataStore(DataStore):
                                                  f"created_at, "
                                                  f"author, "
                                                  f"embedding "
-                                                 f"from {self._document_table_name} WHERE id IN ({parameter_marks})",
-                                                 diskann_neighbors.tolist())
+                                                 f"from {self._document_table_name} WHERE {sql_filter}",
+                                                 parameters)
             # Fetch all the data
             data = cursor.fetchall()
             query_results = []
@@ -402,32 +414,38 @@ class DiskANNDataStore(DataStore):
     def _convert_metadata_filter_to_sqlite_filter(
             self,
             metadata_filter: Optional[DocumentMetadataFilter] = None,
-    ) -> Optional[tuple[str, Any]]:
+    ) -> Optional[tuple[str, List[str]]]:
         if metadata_filter is None:
-            return None
+            return None, None
 
         clauses = []
         parameters = []
 
-        logger.trace("Creating SQL filter for metadata: {}", metadata_filter)
-
         # Equality filters for the payload attributes
         if metadata_filter:
-            if metadata_filter.document_id:
+            logger.opt(lazy=True).debug("Creating SQL filter for metadata: {x}", x=lambda: metadata_filter.__dict__)
+            if hasattr(metadata_filter, 'document_id') and metadata_filter.document_id:
                 clauses.append("externalId == ?")
                 parameters.append(metadata_filter.document_id)
-            if metadata_filter.source:
-                raise NotImplementedError
-            if metadata_filter.source_id:
-                raise NotImplementedError
-            if metadata_filter.author:
-                raise NotImplementedError
-            if metadata_filter.start_date:
-                raise NotImplementedError
-            if metadata_filter.end_date:
-                raise NotImplementedError
+            if hasattr(metadata_filter, 'source') and metadata_filter.source:
+                clauses.append("source == ?")
+                parameters.append(metadata_filter.source)
+            if hasattr(metadata_filter, 'source_id') and metadata_filter.source_id:
+                clauses.append("source_id == ?")
+                parameters.append(metadata_filter.source_id)
+            print(f"{metadata_filter.author=}")
+            if hasattr(metadata_filter, 'author') and metadata_filter.author:
+                clauses.append("author LIKE ?")
+                parameters.append(metadata_filter.author)
+            if hasattr(metadata_filter, 'start_date') and metadata_filter.start_date:
+                clauses.append("createdAt >= ?")
+                parameters.append(to_unix_timestamp(metadata_filter.start_date))
+            if hasattr(metadata_filter, 'end_date') and metadata_filter.end_date:
+                clauses.append("createdAt <= ?")
+                parameters.append(to_unix_timestamp(metadata_filter.end_date))
 
+        logger.opt(lazy=True).debug("Created filter clauses {c} and parameters {p}", c=lambda: clauses, p=lambda: parameters)
         if 0 == len(clauses):
-            return None
+            return None, None
 
-        return " OR ".join(clauses), parameters
+        return " AND ".join(clauses), parameters
