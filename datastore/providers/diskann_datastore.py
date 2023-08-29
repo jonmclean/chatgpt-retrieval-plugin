@@ -217,69 +217,83 @@ class DiskANNDataStore(DataStore):
         """
         Takes in a list of queries with embeddings and filters and returns a list of query results with matching document chunks and scores.
         """
-        results = []
+        all_results = []
         for query in queries:
-            diskann_neighbors, diskann_distances = self._diskann_provider.search(
-                np.array(query.embedding).astype(np.single),
-                k_neighbors=query.top_k,
-                complexity=query.top_k * 2,
-            )
+            # range is (start inclusive, end exclusive)
+            for iteration in range(1, 4, 1):
+                # Use a back-off to search for more results each time.  We may need more results if the filter hides
+                # some of the results we returned from DiskANN
+                number_to_find = query.top_k ** iteration
+                logger.debug("Searching using top_k {} and iteration {} for a total number_to_find of {}", query.top_k, iteration, number_to_find)
 
-            internal_id_to_distance_dict = dict(zip(diskann_neighbors, diskann_distances))
+                query_result = await self.diskann_query(number_to_find=number_to_find, query_embedding=query.embedding, query_filter=query.filter, query_text=query.query)
 
-            parameter_marks = ','.join('?' * len(diskann_neighbors))
-            sql_filter: str
-            sql_filter_parameters: List[str]
-            sql_filter, sql_filter_parameters = self._convert_metadata_filter_to_sqlite_filter(metadata_filter=query.filter)
-            parameters = diskann_neighbors.tolist()
-            logger.debug("SQL Filter {}", sql_filter)
-            if sql_filter is not None:
-                sql_filter = f"id IN ({parameter_marks}) AND {sql_filter}"
-                parameters = parameters + sql_filter_parameters
-            else:
-                sql_filter = f"id IN ({parameter_marks})"
-            logger.debug("Searching SQL for vectors from with filter '{}' and parameters '{}'", sql_filter, parameters)
+                # If we found as many results as we asked for then short-circuit
+                if len(query_result.results) >= query.top_k:
+                    logger.debug("Found {} results after iteration {}", len(query_result.results), iteration)
+                    query_result.results = query_result.results[:query.top_k]
+                    break
 
-            cursor = self._conn.cursor().execute(f"SELECT "
-                                                 f"id, "
-                                                 f"externalId, "
-                                                 f"documentChunkId, "
-                                                 f"documentText, "
-                                                 f"source, "
-                                                 f"source_id, "
-                                                 f"url, "
-                                                 f"created_at, "
-                                                 f"author, "
-                                                 f"embedding "
-                                                 f"from {self._document_table_name} WHERE {sql_filter}",
-                                                 parameters)
-            # Fetch all the data
-            data = cursor.fetchall()
-            query_results = []
+            all_results.append(query_result)
 
-            for item in data:
-                internal_id = item['id']
-                query_results.append(
-                    DocumentChunkWithScore(
-                        # "distance" goes up 0 to 1 but "score" goes from 1 to 0.
-                        score=(1 - internal_id_to_distance_dict[internal_id]),
-                        id=item['documentChunkId'],
-                        text=item['documentText'],
-                        metadata=DocumentChunkMetadata(
-                            document_id=item['externalId'],
-                            source=item['source'],
-                            source_id=item['source_id'],
-                            url=item['url'],
-                            created_at=to_date_string(item['created_at']),
-                            author=item['author'],
-                        ),
-                        embedding=[] #json.loads(item['embedding']),
-                    ))
+        return all_results
 
-            results.append(QueryResult(query=query.query,
-                                       results=sorted(query_results, key=lambda result: result.score, reverse=True)))
-
-        return results
+    async def diskann_query(self, number_to_find: int, query_embedding: List[float], query_filter: Optional[DocumentMetadataFilter], query_text: str):
+        diskann_neighbors, diskann_distances = self._diskann_provider.search(
+            np.array(query_embedding).astype(np.single),
+            k_neighbors=number_to_find,
+            complexity=number_to_find * 2,
+        )
+        internal_id_to_distance_dict = dict(zip(diskann_neighbors, diskann_distances))
+        parameter_marks = ','.join('?' * len(diskann_neighbors))
+        sql_filter: str
+        sql_filter_parameters: List[str]
+        sql_filter, sql_filter_parameters = self._convert_metadata_filter_to_sqlite_filter(metadata_filter=query_filter)
+        parameters = diskann_neighbors.tolist()
+        logger.debug("SQL Filter {}", sql_filter)
+        if sql_filter is not None:
+            sql_filter = f"id IN ({parameter_marks}) AND {sql_filter}"
+            parameters = parameters + sql_filter_parameters
+        else:
+            sql_filter = f"id IN ({parameter_marks})"
+        logger.debug("Searching SQL for vectors from with filter '{}' and parameters '{}'", sql_filter, parameters)
+        cursor = self._conn.cursor().execute(f"SELECT "
+                                             f"id, "
+                                             f"externalId, "
+                                             f"documentChunkId, "
+                                             f"documentText, "
+                                             f"source, "
+                                             f"source_id, "
+                                             f"url, "
+                                             f"created_at, "
+                                             f"author, "
+                                             f"embedding "
+                                             f"from {self._document_table_name} WHERE {sql_filter}",
+                                             parameters)
+        # Fetch all the data
+        data = cursor.fetchall()
+        query_results = []
+        for item in data:
+            internal_id = item['id']
+            query_results.append(
+                DocumentChunkWithScore(
+                    # "distance" goes up 0 to 1 but "score" goes from 1 to 0.
+                    score=(1 - internal_id_to_distance_dict[internal_id]),
+                    id=item['documentChunkId'],
+                    text=item['documentText'],
+                    metadata=DocumentChunkMetadata(
+                        document_id=item['externalId'],
+                        source=item['source'],
+                        source_id=item['source_id'],
+                        url=item['url'],
+                        created_at=to_date_string(item['created_at']),
+                        author=item['author'],
+                    ),
+                    embedding=[]  # json.loads(item['embedding']),
+                ))
+        query_result = QueryResult(query=query_text,
+                                   results=sorted(query_results, key=lambda result: result.score, reverse=True))
+        return query_result
 
     async def _upsert(self, chunks: Dict[str, List[DocumentChunk]]) -> List[str]:
         """
