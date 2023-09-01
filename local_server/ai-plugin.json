@@ -9,7 +9,7 @@
   },
   "api": {
     "type": "openapi",
-    "url": "http://localhost:3333/.well-known/openapi.yaml991"
+    "url": "http://localhost:3333/.well-known/openapi.yaml"
   },
   "logo_url": "http://localhost:3333/.well-known/logo.png",
   "contact_email": "hello@contact.com", 
